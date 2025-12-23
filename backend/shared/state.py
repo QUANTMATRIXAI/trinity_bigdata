@@ -1,0 +1,3 @@
+# shared/state.py
+
+DATASETS = {}

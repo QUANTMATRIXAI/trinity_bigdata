@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+celery
+redis
+minio
+polars
+pyarrow
+pandas
+openpyxl
+pydantic>=2.0
+pydantic-settings>=2.0
+fastexcel
+xlsx2csv

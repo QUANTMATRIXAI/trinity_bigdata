@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+__pycache__/
+venv/
+.env
+
+# Docker Data (Do not upload database files)
+minio_data/
+postgres_data/
+
+# Large Data Files (GitHub will block these)
+*.xlsx
+*.xls
+*.csv
+*.parquet
+*.zip
+
+# System files
+.DS_Store
+Thumbs.db
