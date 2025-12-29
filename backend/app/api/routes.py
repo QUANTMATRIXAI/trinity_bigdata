@@ -3,11 +3,14 @@ from pydantic import BaseModel
 from typing import Optional, Dict
 
 # Import your services
+# 🟢 UPDATED: Added imports for analysis functions
 from app.services.storage_service import generate_presigned_upload_url, minio_client, RAW_BUCKET
 from app.services.processing_service import scan_excel_sheets, convert_sheet_to_parquet
-
-# 👇 ADD THIS NEW IMPORT LINE 👇
-from app.services.analysis_service import analyze_dataset, get_column_stats
+from app.services.analysis_service import (
+    analyze_dataset, 
+    get_column_stats, 
+    get_unique_values  # 👈 Added this missing import
+)
 from app.services.aggregation_service import perform_aggregation
 
 router = APIRouter()
@@ -20,10 +23,10 @@ router = APIRouter()
 def create_upload_url(filename: str):
     """
     Generates a Presigned URL so the Frontend can upload directly to MinIO.
+    Now supports .xlsx, .xls, and .csv files.
     """
     try:
         # We save everything in a specific folder structure (optional)
-        # e.g., "raw-datasets/filename.csv"
         object_key = filename 
         
         upload_url = generate_presigned_upload_url(object_key)
@@ -57,15 +60,16 @@ def list_datasets():
 
 
 # ---------------------------------------------------------
-# 3. EXCEL WORKFLOW (PHASE 2)
+# 3. INGESTION WORKFLOW (PHASE 2)
 # ---------------------------------------------------------
 
 # A. SCAN: "What sheets are inside this file?"
 @router.get("/datasets/scan")
 def scan_file(object_key: str):
     """
-    Reads only the metadata of an Excel file to list sheet names.
-    Fast & Low RAM.
+    Reads metadata.
+    - If Excel: Lists sheet names.
+    - If CSV: Returns ["Sheet1"] automatically.
     """
     result = scan_excel_sheets(object_key)
     
@@ -75,7 +79,7 @@ def scan_file(object_key: str):
     return result
 
 
-# B. CONVERT: "Process this specific sheet"
+# B. CONVERT: "Process this specific sheet/file"
 class ConvertRequest(BaseModel):
     object_key: str
     sheet_name: str
@@ -84,7 +88,7 @@ class ConvertRequest(BaseModel):
 def convert_dataset(req: ConvertRequest):
     """
     Trigger the heavy conversion job:
-    Excel Sheet -> Parquet File (Saved in 'processed-datasets' bucket)
+    Excel/CSV -> Parquet File (Saved in 'processed-datasets' bucket)
     """
     result = convert_sheet_to_parquet(req.object_key, req.sheet_name)
     
@@ -92,14 +96,20 @@ def convert_dataset(req: ConvertRequest):
         raise HTTPException(status_code=500, detail=result["message"])
         
     return result
-# 👇 NEW: Get Data for Table (with Paging & Sorting)
+
+
+# ---------------------------------------------------------
+# 4. ANALYSIS & AGGREGATION
+# ---------------------------------------------------------
+
+# C. VIEW: Get Data for Table (with Paging & Sorting)
 class ViewRequest(BaseModel):
     filename: str
     page: int = 1
     page_size: int = 10
     sort_by: Optional[str] = None
     sort_desc: bool = False
-    filters: Optional[dict] = None  # 👈 Add this line
+    filters: Optional[dict] = None
 
 @router.post("/analysis/view")
 def view_data(req: ViewRequest):
@@ -109,21 +119,21 @@ def view_data(req: ViewRequest):
         req.page_size, 
         req.sort_by, 
         req.sort_desc,
-        req.filters  # 👈 Pass it here
+        req.filters
     )
-# 👇 NEW: Get Filter Options for a Column
+
+# D. STATS: Get Filter Options for a Column
 @router.get("/analysis/stats")
 def column_stats(filename: str, column: str):
     return get_column_stats(filename, column)
 
-# 👇 NEW DATA MODEL FOR AGGREGATION REQUESTS
+# E. AGGREGATE: Group By calculations
 class AggregateRequest(BaseModel):
     filename: str
     group_by_col: str
     operation: str  # "sum", "avg", "count", etc.
     target_col: str
 
-# 👇 NEW ROUTE
 @router.post("/analysis/aggregate")
 def aggregate_data(req: AggregateRequest):
     return perform_aggregation(
@@ -133,6 +143,7 @@ def aggregate_data(req: AggregateRequest):
         req.target_col
     )
 
+# F. UNIQUE VALUES: For Dropdown Filters
 @router.get("/analysis/unique-values")
 def get_column_values(filename: str, column: str):
     return get_unique_values(filename, column)

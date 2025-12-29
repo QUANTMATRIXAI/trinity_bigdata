@@ -45,6 +45,9 @@ function App() {
         const scanRes = await axios.get(`${BACKEND_URL}/api/datasets/scan?object_key=${encodeURIComponent(object_key)}`);
         
         if (scanRes.data.status === "success") {
+            // 🟢 UPDATED LOGIC: If it's a CSV, it might not have "sheets", or backend returns ["Sheet1"]
+            // If it's a CSV, we can optionally auto-start conversion or let them click "Sheet1"
+            // For consistency, we treat it exactly like Excel with 1 sheet.
             setActiveFile({ filename: object_key, sheets: scanRes.data.sheets });
             setStatus("idle"); 
         } else {
@@ -124,7 +127,14 @@ function App() {
             {!activeFile && status !== "uploading" && status !== "scanning" && (
                 <motion.div key="select" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="space-y-4">
                     <div className="relative group">
-                        <input type="file" id="fileInput" onChange={(e) => setFile(e.target.files[0])} className="hidden" />
+                        {/* 🟢 UPDATED: Changed accept to allow CSV files */}
+                        <input 
+                            type="file" 
+                            id="fileInput" 
+                            accept=".xlsx, .xls, .csv" 
+                            onChange={(e) => setFile(e.target.files[0])} 
+                            className="hidden" 
+                        />
                         <label htmlFor="fileInput" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-zinc-800 rounded-2xl cursor-pointer hover:border-blue-500/50 hover:bg-zinc-800/30 transition-all">
                             {file ? (
                                 <div className="text-center px-4">
@@ -136,6 +146,8 @@ function App() {
                                 <div className="text-center">
                                     <UploadCloud className="w-8 h-8 text-zinc-600 mx-auto mb-2 group-hover:text-blue-500 transition-colors" />
                                     <p className="text-sm text-zinc-400">Click to browse or drag file</p>
+                                    {/* 🟢 UPDATED: Added CSV to label text */}
+                                    <p className="text-xs text-zinc-600 mt-1">Supports .xlsx, .xls, .csv</p>
                                 </div>
                             )}
                         </label>
@@ -169,7 +181,7 @@ function App() {
              {status === "scanning" && (
                 <motion.div key="scanning" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="text-center py-8">
                     <Loader2 className="w-10 h-10 text-blue-500 animate-spin mx-auto mb-4" />
-                    <p className="text-sm text-zinc-300">Scanning Excel Structure...</p>
+                    <p className="text-sm text-zinc-300">Scanning File Structure...</p>
                 </motion.div>
             )}
 
@@ -187,7 +199,10 @@ function App() {
                     </div>
 
                     <div className="space-y-2">
-                        <p className="text-xs font-bold text-zinc-600 uppercase tracking-wider pl-1">Select Sheet</p>
+                        <p className="text-xs font-bold text-zinc-600 uppercase tracking-wider pl-1">
+                            {/* 🟢 UPDATED: Show different text if CSV (optional but nice) */}
+                            {activeFile.filename.endsWith('.csv') ? 'Confirm Processing' : 'Select Sheet'}
+                        </p>
                         <div className="max-h-40 overflow-y-auto pr-1 space-y-2 custom-scrollbar">
                             {activeFile.sheets.map((sheet) => (
                                 <button 
@@ -195,7 +210,10 @@ function App() {
                                     onClick={() => handleConvert(sheet)}
                                     className="w-full flex items-center justify-between p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors group text-left"
                                 >
-                                    <span className="text-sm text-zinc-300">{sheet}</span>
+                                    <span className="text-sm text-zinc-300">
+                                        {/* 🟢 UPDATED: If CSV, maybe rename "Sheet1" to "Process File" for better UX, or keep as is. Keeping as is for safety. */}
+                                        {sheet === "Sheet1" && activeFile.filename.endsWith('.csv') ? "Process CSV Data" : sheet}
+                                    </span>
                                     <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-blue-400" />
                                 </button>
                             ))}
@@ -207,7 +225,7 @@ function App() {
             {/* VIEW 5: CONVERTING PROGRESS */}
             {status === "converting" && (
                 <motion.div key="converting" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="text-center py-8">
-                     <div className="w-full bg-zinc-800 h-2 rounded-full overflow-hidden mb-4">
+                      <div className="w-full bg-zinc-800 h-2 rounded-full overflow-hidden mb-4">
                         <motion.div 
                             className="h-full bg-purple-500" 
                             initial={{width: 0}} 
